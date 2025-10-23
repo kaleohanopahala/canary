@@ -648,6 +648,8 @@ void Game::setGameState(GameState_t newState) {
 			g_globalEvents().save();
 			g_globalEvents().shutdown();
 
+			g_saveManager().saveAll();
+
 			// kick all players that are still online
 			auto it = players.begin();
 			while (it != players.end()) {
@@ -656,7 +658,6 @@ void Game::setGameState(GameState_t newState) {
 			}
 
 			saveMotdNum();
-			g_saveManager().saveAll();
 
 			g_dispatcher().addEvent([this] { shutdown(); }, __FUNCTION__);
 
