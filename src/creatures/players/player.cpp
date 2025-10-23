@@ -10671,7 +10671,9 @@ void Player::onRemoveCreature(const std::shared_ptr<Creature> &creature, bool is
 
 		closeShopWindow();
 
-		g_saveManager().savePlayer(player);
+		if (isLogout || g_game().getGameState() != GAME_STATE_SHUTDOWN) {
+			g_saveManager().savePlayer(player);
+		}
 	}
 
 	if (creature == shopOwner) {
