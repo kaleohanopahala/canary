@@ -12,14 +12,55 @@
 #include "config/configmanager.hpp"
 #include "creatures/players/grouping/guild.hpp"
 #include "game/game.hpp"
+#include "game/scheduling/dispatcher.hpp"
 #include "io/ioguild.hpp"
 #include "io/iologindata.hpp"
 #include "kv/kv.hpp"
 #include "lib/di/container.hpp"
 #include "creatures/players/player.hpp"
 
+#include <future>
+#include <memory>
+#include <thread>
+#include <utility>
+
 SaveManager::SaveManager(ThreadPool &threadPool, KVStore &kvStore, Logger &logger, Game &game) :
-	threadPool(threadPool), kv(kvStore), logger(logger), game(game) { }
+	threadPool(threadPool), kv(kvStore), logger(logger), game(game), gameThreadId(std::this_thread::get_id()) { }
+
+Position SaveManager::resolveLoginPosition(const std::shared_ptr<Player> &player) {
+	if (!player) {
+		return {};
+	}
+
+	auto resolveOnGameThread = [this, player]() -> Position {
+		const Position currentPosition = player->getPosition();
+		if (game.map.getTile(currentPosition)) {
+			return currentPosition;
+		}
+
+		const Position &storedLoginPosition = player->getLoginPosition();
+		if (game.map.getTile(storedLoginPosition)) {
+			return storedLoginPosition;
+		}
+
+		return player->getTemplePosition();
+	};
+
+	if (std::this_thread::get_id() == gameThreadId) {
+		return resolveOnGameThread();
+	}
+
+	auto promise = std::make_shared<std::promise<Position>>();
+	auto future = promise->get_future();
+	g_dispatcher().addEvent(
+		[promise = std::move(promise), resolveOnGameThread = std::move(resolveOnGameThread)]() mutable {
+			promise->set_value(resolveOnGameThread());
+		},
+		"SaveManager::resolveLoginPosition"
+	);
+
+	return future.get();
+}
 
 SaveManager &SaveManager::getInstance() {
 	return inject<SaveManager>();
@@ -35,7 +76,7 @@ void SaveManager::saveAll() {
 	logger.info("Saving {} players... (Async: {})", players.size(), asyncSave ? "Enabled" : "Disabled");
 	std::vector<std::future<void>> futures;
 	for (const auto &[_, player] : players) {
-		player->loginPosition = player->getPosition();
+		player->loginPosition = resolveLoginPosition(player);
 
 		auto fut = threadPool.submit_task([this, player] {
 			doSavePlayer(player);
@@ -145,6 +186,8 @@ bool SaveManager::doSavePlayer(std::shared_ptr<Player> player) {
 	if (g_game().getGameState() == GAME_STATE_NORMAL) {
 		logger.debug("Saving player {}.", player->getName());
 	}
+
+	player->loginPosition = resolveLoginPosition(player);
 
 	bool saveSuccess = IOLoginData::savePlayer(player);
 	if (!saveSuccess) {
