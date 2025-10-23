@@ -11,11 +11,16 @@
 
 #include "lib/thread/thread_pool.hpp"
 
+#include <thread>
+
 class KVStore;
 class Logger;
 class Game;
 class Player;
 class Guild;
+struct Position;
+
+constexpr auto g_saveManager = SaveManager::getInstance;
 
 class SaveManager {
 public:
@@ -38,6 +43,7 @@ private:
 
 	void schedulePlayer(std::weak_ptr<Player> player);
 	bool doSavePlayer(std::shared_ptr<Player> player);
+	Position resolveLoginPosition(const std::shared_ptr<Player> &player);
 
 	std::atomic<std::chrono::steady_clock::time_point> m_scheduledAt;
 	phmap::parallel_flat_hash_map<uint32_t, std::chrono::steady_clock::time_point> m_playerMap;
@@ -46,6 +52,5 @@ private:
 	KVStore &kv;
 	Logger &logger;
 	Game &game;
+	const std::thread::id gameThreadId;
 };
-
-constexpr auto g_saveManager = SaveManager::getInstance;
