@@ -20,8 +20,6 @@ class Player;
 class Guild;
 struct Position;
 
-constexpr auto g_saveManager = SaveManager::getInstance;
-
 class SaveManager {
 public:
 	explicit SaveManager(ThreadPool &threadPool, KVStore &kvStore, Logger &logger, Game &game);
@@ -54,3 +52,5 @@ private:
 	Game &game;
 	const std::thread::id gameThreadId;
 };
+
+constexpr auto g_saveManager = SaveManager::getInstance;
