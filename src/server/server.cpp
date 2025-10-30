@@ -97,20 +97,20 @@ void ServicePort::onAccept(const Connection_ptr &connection, const std::error_co
 			return;
 		}
 
-		const auto remote_ip = connection->getIP();
 		const bool isIpv6Connection = connection->isIPv6Connection();
-		const bool allowIpv6 = isIpv6Connection && g_configManager().getBoolean(USE_IPV6);
-
-		if (remote_ip != 0) {
-			if (!inject<Ban>().acceptConnection(remote_ip)) {
+		if (isIpv6Connection) {
+			if (!g_configManager().getBoolean(USE_IPV6)) {
 				connection->close(FORCE_CLOSE);
 				accept();
 				return;
 			}
-		} else if (!allowIpv6) {
-			connection->close(FORCE_CLOSE);
-			accept();
-			return;
+		} else {
+			const auto remote_ip = connection->getIP();
+			if (remote_ip == 0 || !inject<Ban>().acceptConnection(remote_ip)) {
+				connection->close(FORCE_CLOSE);
+				accept();
+				return;
+			}
 		}
 
 		const Service_ptr service = services.front();
