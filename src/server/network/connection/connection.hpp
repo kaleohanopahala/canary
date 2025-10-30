@@ -9,6 +9,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "declarations.hpp"
 // TODO: Remove circular includes (maybe shared_ptr?)
 #include "server/network/message/networkmessage.hpp"
@@ -69,6 +71,8 @@ public:
 	void send(const OutputMessage_ptr &outputMessage);
 
 	uint32_t getIP();
+	std::string getRemoteIPString();
+	bool isIPv6Connection();
 
 private:
 	void parseProxyIdentification(const std::error_code &error);
@@ -104,10 +108,15 @@ private:
 	std::time_t timeConnected = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 	uint32_t packetsSent = 0;
 	uint32_t ip = 1;
+	bool remoteAddressResolved = false;
+	bool ipv6Connection = false;
+	std::string remoteIpString;
 
 	std::underlying_type_t<ConnectionState_t> connectionState = CONNECTION_STATE_OPEN;
 	bool receivedFirst = false;
 
 	friend class ServicePort;
 	friend class ConnectionManager;
+
+	void resolveRemoteAddressLocked();
 };

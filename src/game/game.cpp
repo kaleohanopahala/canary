@@ -10791,7 +10791,8 @@ void Game::playerCheckActivity(const std::string &playerName, int interval) {
 		return;
 	}
 
-	if (player->getIP() == 0) {
+	const auto remoteAddress = player->getIPString();
+	if (remoteAddress.empty() && player->getIP() == 0) {
 		g_game().removeDeadPlayer(playerName);
 		g_logger().info("Player with name '{}' has logged out due to exited in death screen", player->getName());
 		player->disconnect();
