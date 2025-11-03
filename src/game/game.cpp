@@ -3090,7 +3090,7 @@ void Game::playerQuickLootCorpse(const std::shared_ptr<Player> &player, const st
 	// If all remaining items are skipped, force a tile update to remove the highlight
 	if (allRemainingSkipped) {
 		if (const auto tile = corpse->getTile()) {
-			tile->sendUpdateToPlayer(player);
+			player->sendUpdateTile(tile, tile->getPosition());
 		}
 	}
 
