@@ -3073,6 +3073,27 @@ void Game::playerQuickLootCorpse(const std::shared_ptr<Player> &player, const st
 		player->sendTextMessage(MESSAGE_EVENT_ADVANCE, ss.str());
 	}
 
+	// Check if all remaining items in the corpse are on the player's skipped loot list
+	bool allRemainingSkipped = !corpse->empty();
+	if (allRemainingSkipped) {
+		for (ContainerIterator it = corpse->iterator(); it.hasNext(); it.advance()) {
+			const auto &item = *it;
+			bool listed = player->isQuickLootListedItem(item);
+			// Condition for an item *not* to be skipped
+			if (!((listed && ignoreListItems) || (!listed && !ignoreListItems))) {
+				allRemainingSkipped = false;
+				break;
+			}
+		}
+	}
+
+	// If all remaining items are skipped, force a tile update to remove the highlight
+	if (allRemainingSkipped) {
+		if (const auto tile = corpse->getTile()) {
+			tile->sendUpdateToPlayer(player);
+		}
+	}
+
 	corpse->sendUpdateToClient(player);
 
 	player->lastQuickLootNotification = OTSYS_TIME();
