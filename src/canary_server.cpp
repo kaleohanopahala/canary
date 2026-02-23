@@ -79,7 +79,6 @@ int CanaryServer::run() {
 #endif
 				rsa.start();
 				initializeDatabase();
-				modulesLoadHelper(WeaponProficiency::loadFromJson(), "proficiencies.json");
 				loadModules();
 				setWorldType();
 				loadMaps();
@@ -389,6 +388,8 @@ void CanaryServer::loadModules() {
 	modulesLoadHelper(g_storages().loadFromXML(), "XML/storages.xml");
 
 	modulesLoadHelper(Item::items.loadFromXml(), "items.xml");
+
+	modulesLoadHelper(WeaponProficiency::loadFromJson(), "proficiencies.json");
 
 	const auto datapackFolder = g_configManager().getString(DATA_DIRECTORY);
 	logger.debug("Loading core scripts on folder: {}/", coreFolder);
