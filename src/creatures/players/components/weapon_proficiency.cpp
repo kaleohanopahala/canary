@@ -841,22 +841,27 @@ WeaponProficiencyCriticalBonus WeaponProficiency::getElementCritical(CombatType_
 	if (type == COMBAT_NONE) {
 		return {};
 	}
-	auto enumValue = static_cast<uint8_t>(type);
+	const auto enumValue = static_cast<uint8_t>(type);
 	if (enumValue < m_elementCritical.size()) {
-		return m_elementCritical.at(enumValue);
+		return m_elementCritical[enumValue];
 	}
 	g_logger().error("[{}]. Element type {} is out of range.", __FUNCTION__, enumValue);
 	return {};
 }
 
 void WeaponProficiency::addElementCritical(CombatType_t type, const WeaponProficiencyCriticalBonus &bonus) {
-	auto enumValue = static_cast<uint8_t>(type);
-	try {
-		m_elementCritical.at(enumValue).chance += bonus.chance;
-		m_elementCritical.at(enumValue).damage += bonus.damage;
-	} catch (const std::out_of_range &e) {
-		g_logger().error("[{}]. Type {} is out of range. Error message: {}", __FUNCTION__, enumValue, e.what());
+	if (type == COMBAT_NONE) {
+		return;
 	}
+
+	const auto enumValue = static_cast<uint8_t>(type);
+	if (enumValue >= m_elementCritical.size()) {
+		g_logger().error("[{}]. Type {} is out of range.", __FUNCTION__, enumValue);
+		return;
+	}
+
+	m_elementCritical[enumValue].chance += bonus.chance;
+	m_elementCritical[enumValue].damage += bonus.damage;
 }
 
 uint32_t WeaponProficiency::getSpellBonus(uint16_t spellId, WeaponProficiencySpellBoost_t boost) const {
@@ -986,7 +991,11 @@ void WeaponProficiency::applyRunesCritical(CombatDamage &damage, bool aggressive
 }
 
 void WeaponProficiency::applyElementCritical(CombatDamage &damage) const {
-	const auto &elementCritical = getElementCritical(damage.primary.type);
+	if (damage.primary.type == COMBAT_NONE || damage.primary.type >= COMBAT_COUNT) {
+		return;
+	}
+
+	const auto elementCritical = getElementCritical(damage.primary.type);
 	if (elementCritical.chance > 0 || elementCritical.damage > 0) {
 		damage.criticalChance += elementCritical.chance * 10000;
 		damage.criticalDamage += elementCritical.damage * 10000;
