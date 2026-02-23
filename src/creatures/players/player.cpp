@@ -3115,6 +3115,10 @@ uint16_t Player::getXpBoostPercent() const {
 }
 
 uint16_t Player::getDisplayXpBoostPercent() const {
+	if (xpBoostTime == 0) {
+		return 0;
+	}
+
 	return std::clamp<uint16_t>(xpBoostPercent * (baseXpGain / 100), 0, std::numeric_limits<uint16_t>::max());
 }
 
@@ -3132,12 +3136,18 @@ void Player::setStaminaXpBoost(uint16_t value) {
 }
 
 void Player::setXpBoostTime(uint16_t timeLeft) {
+	const bool hadXpBoost = xpBoostTime > 0;
+
 	// only allow time boosts of 12 hours or less
 	if (timeLeft > 12 * 3600) {
 		xpBoostTime = 12 * 3600;
-		return;
+	} else {
+		xpBoostTime = timeLeft;
 	}
-	xpBoostTime = timeLeft;
+
+	if (hadXpBoost != (xpBoostTime > 0)) {
+		sendStats();
+	}
 }
 
 uint16_t Player::getXpBoostTime() const {
