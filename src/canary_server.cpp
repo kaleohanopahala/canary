@@ -377,6 +377,7 @@ void CanaryServer::loadModules() {
 	logger.info("Loading modules and scripts...");
 
 	auto coreFolder = g_configManager().getString(CORE_DIRECTORY);
+	modulesLoadHelper(WeaponProficiency::loadFromJson(), "proficiencies.json");
 	// Load appearances.dat first
 	modulesLoadHelper((g_game().loadAppearanceProtobuf(coreFolder + "/items/appearances.dat") == ERROR_NONE), "appearances.dat");
 
@@ -388,8 +389,6 @@ void CanaryServer::loadModules() {
 	modulesLoadHelper(g_storages().loadFromXML(), "XML/storages.xml");
 
 	modulesLoadHelper(Item::items.loadFromXml(), "items.xml");
-
-	modulesLoadHelper(WeaponProficiency::loadFromJson(), "proficiencies.json");
 
 	const auto datapackFolder = g_configManager().getString(DATA_DIRECTORY);
 	logger.debug("Loading core scripts on folder: {}/", coreFolder);
