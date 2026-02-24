@@ -2305,6 +2305,7 @@ void ProtocolGame::parseImbuementAction(NetworkMessage &msg) {
 		auto slotIndex = msg.getByte();
 
 		if (Item::items[itemId].imbuementSlot <= 0) {
+			player->sendImbuementResult("This item is not imbuable.");
 			return;
 		}
 
