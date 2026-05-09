@@ -3754,17 +3754,21 @@ void Player::doAttacking(uint32_t interval) {
 			result = Weapon::useFist(static_self_cast<Player>(), attackedCreature);
 		}
 
-		const auto &task = createPlayerTask(
-			std::max<uint32_t>(SCHEDULER_MINTICKS, delay), [self = std::weak_ptr<Creature>(getCreature())] {
-				if (const auto &creature = self.lock()) {
-					creature->checkCreatureAttack(true);
-				} }, __FUNCTION__
-		);
-
 		if (!classicSpeed) {
+			const uint32_t generation = m_attackCheckGeneration;
+			const auto &task = createPlayerTask(
+				std::max<uint32_t>(SCHEDULER_MINTICKS, delay), [self = std::weak_ptr<Player>(getPlayer()), generation] {
+					if (const auto &player = self.lock()) {
+						if (generation != player->m_attackCheckGeneration) {
+							return;
+						}
+
+						player->checkCreatureAttack(true);
+					} }, __FUNCTION__
+			);
 			setNextActionTask(task, false);
 		} else {
-			g_dispatcher().scheduleEvent(task);
+			requestAttackCheck(std::max<uint32_t>(SCHEDULER_MINTICKS, delay));
 		}
 
 		if (result) {
@@ -5785,6 +5789,18 @@ bool Player::setFollowCreature(const std::shared_ptr<Creature> &creature) {
 }
 
 bool Player::setAttackedCreature(const std::shared_ptr<Creature> &creature) {
+	uint64_t pendingAttackCheckEventId = 0;
+	{
+		std::scoped_lock lock(m_attackCheckMutex);
+		++m_attackCheckGeneration;
+		pendingAttackCheckEventId = m_pendingAttackCheckEventId;
+		m_pendingAttackCheckEventId = 0;
+		m_hasPendingAttackCheck = false;
+	}
+	if (pendingAttackCheckEventId != 0) {
+		g_dispatcher().stopEvent(pendingAttackCheckEventId);
+	}
+
 	if (!Creature::setAttackedCreature(creature)) {
 		sendCancelTarget();
 		return false;
@@ -5800,9 +5816,66 @@ bool Player::setAttackedCreature(const std::shared_ptr<Creature> &creature) {
 	}
 
 	if (creature) {
-		checkCreatureAttack();
+		uint32_t delay = 0;
+		if (lastAttack != 0) {
+			const uint32_t elapsed = OTSYS_TIME() - lastAttack;
+			const uint32_t attackSpeed = getAttackSpeed();
+			if (elapsed < attackSpeed) {
+				delay = std::max<uint32_t>(SCHEDULER_MINTICKS, attackSpeed - elapsed);
+			}
+		}
+
+		requestAttackCheck(delay);
 	}
 	return true;
+}
+
+void Player::requestAttackCheck(uint32_t delay) {
+	if (!getAttackedCreature()) {
+		return;
+	}
+
+	uint32_t generation = 0;
+	{
+		std::scoped_lock lock(m_attackCheckMutex);
+		// Debounce: one pending attack-check event per player at a time.
+		if (m_pendingAttackCheckEventId != 0 || m_hasPendingAttackCheck) {
+			return;
+		}
+		generation = m_attackCheckGeneration;
+		m_hasPendingAttackCheck = true;
+	}
+
+	const auto weakPlayer = std::weak_ptr<Player>(getPlayer());
+	const auto eventId = g_dispatcher().scheduleEvent(
+		delay,
+		[weakPlayer, generation] {
+			const auto &player = weakPlayer.lock();
+			if (!player) {
+				return;
+			}
+
+			{
+				std::scoped_lock lock(player->m_attackCheckMutex);
+				// Drop stale callbacks from older generations or already-cleared state.
+				if (!player->m_hasPendingAttackCheck || generation != player->m_attackCheckGeneration) {
+					return;
+				}
+
+				player->m_pendingAttackCheckEventId = 0;
+				player->m_hasPendingAttackCheck = false;
+			}
+			player->checkCreatureAttack(true);
+		},
+		"Player::requestAttackCheck");
+
+	{
+		std::scoped_lock lock(m_attackCheckMutex);
+		m_pendingAttackCheckEventId = eventId;
+		if (m_pendingAttackCheckEventId == 0) {
+			m_hasPendingAttackCheck = false;
+		}
+	}
 }
 
 void Player::goToFollowCreature() {
