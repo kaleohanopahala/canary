@@ -148,6 +148,11 @@ void Creature::checkCreatureAttack(bool now) {
 		return;
 	}
 
+	if (const auto &player = getPlayer()) {
+		player->requestAttackCheck();
+		return;
+	}
+
 	g_dispatcher().addEvent([self = std::weak_ptr<Creature>(getCreature())] {
 		if (const auto &creature = self.lock()) {
 			creature->checkCreatureAttack(true);
