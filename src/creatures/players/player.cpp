@@ -5885,7 +5885,8 @@ void Player::requestAttackCheck(uint32_t delay) {
 			}
 			player->checkCreatureAttack(true);
 		},
-		"Player::requestAttackCheck");
+		"Player::requestAttackCheck"
+	);
 
 	uint64_t eventIdToCancel = 0;
 	{
