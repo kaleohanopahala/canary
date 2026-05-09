@@ -3754,17 +3754,28 @@ void Player::doAttacking(uint32_t interval) {
 			result = Weapon::useFist(static_self_cast<Player>(), attackedCreature);
 		}
 
-		const auto &task = createPlayerTask(
-			std::max<uint32_t>(SCHEDULER_MINTICKS, delay), [self = std::weak_ptr<Creature>(getCreature())] {
-				if (const auto &creature = self.lock()) {
-					creature->checkCreatureAttack(true);
-				} }, __FUNCTION__
-		);
-
 		if (!classicSpeed) {
+			uint32_t generation = 0;
+			{
+				std::scoped_lock lock(m_attackCheckMutex);
+				generation = m_attackCheckGeneration;
+			}
+			const auto &task = createPlayerTask(
+				std::max<uint32_t>(SCHEDULER_MINTICKS, delay), [self = std::weak_ptr<Player>(getPlayer()), generation] {
+					if (const auto &player = self.lock()) {
+						{
+							std::scoped_lock lock(player->m_attackCheckMutex);
+							if (generation != player->m_attackCheckGeneration) {
+								return;
+							}
+						}
+
+						player->checkCreatureAttack(true);
+					} }, __FUNCTION__
+			);
 			setNextActionTask(task, false);
 		} else {
-			g_dispatcher().scheduleEvent(task);
+			requestAttackCheck(std::max<uint32_t>(SCHEDULER_MINTICKS, delay));
 		}
 
 		if (result) {
@@ -5785,6 +5796,18 @@ bool Player::setFollowCreature(const std::shared_ptr<Creature> &creature) {
 }
 
 bool Player::setAttackedCreature(const std::shared_ptr<Creature> &creature) {
+	uint64_t pendingAttackCheckEventId = 0;
+	{
+		std::scoped_lock lock(m_attackCheckMutex);
+		++m_attackCheckGeneration;
+		pendingAttackCheckEventId = m_pendingAttackCheckEventId;
+		m_pendingAttackCheckEventId = 0;
+		m_hasPendingAttackCheck = false;
+	}
+	if (pendingAttackCheckEventId != 0) {
+		g_dispatcher().stopEvent(pendingAttackCheckEventId);
+	}
+
 	if (!Creature::setAttackedCreature(creature)) {
 		sendCancelTarget();
 		return false;
@@ -5800,9 +5823,87 @@ bool Player::setAttackedCreature(const std::shared_ptr<Creature> &creature) {
 	}
 
 	if (creature) {
-		checkCreatureAttack();
+		uint32_t delay = 0;
+		if (lastAttack != 0) {
+			const uint32_t elapsed = OTSYS_TIME() - lastAttack;
+			const uint32_t attackSpeed = getAttackSpeed();
+			if (elapsed < attackSpeed) {
+				delay = std::max<uint32_t>(SCHEDULER_MINTICKS, attackSpeed - elapsed);
+			}
+		}
+
+		requestAttackCheck(delay);
 	}
 	return true;
+}
+
+void Player::requestAttackCheck(uint32_t delay) {
+	uint32_t generation = 0;
+	uint64_t pendingAttackCheckEventIdToCancel = 0;
+	{
+		std::scoped_lock lock(m_attackCheckMutex);
+		if (!getAttackedCreature()) {
+			return;
+		}
+
+		// Debounce: one pending attack-check event per player at a time.
+		if (m_pendingAttackCheckEventId != 0 || m_hasPendingAttackCheck) {
+			// Allow immediate retries to preempt delayed checks.
+			if (delay != 0) {
+				return;
+			}
+
+			pendingAttackCheckEventIdToCancel = m_pendingAttackCheckEventId;
+			m_pendingAttackCheckEventId = 0;
+			m_hasPendingAttackCheck = false;
+		}
+		generation = m_attackCheckGeneration;
+		m_hasPendingAttackCheck = true;
+	}
+	if (pendingAttackCheckEventIdToCancel != 0) {
+		g_dispatcher().stopEvent(pendingAttackCheckEventIdToCancel);
+	}
+
+	const auto weakPlayer = std::weak_ptr<Player>(getPlayer());
+	const auto eventId = g_dispatcher().scheduleEvent(
+		delay,
+		[weakPlayer, generation] {
+			const auto &player = weakPlayer.lock();
+			if (!player) {
+				return;
+			}
+
+			{
+				std::scoped_lock lock(player->m_attackCheckMutex);
+				// Drop stale callbacks from older generations or already-cleared state.
+				if (!player->m_hasPendingAttackCheck || generation != player->m_attackCheckGeneration) {
+					return;
+				}
+
+				player->m_pendingAttackCheckEventId = 0;
+				player->m_hasPendingAttackCheck = false;
+			}
+			player->checkCreatureAttack(true);
+		},
+		"Player::requestAttackCheck");
+
+	uint64_t eventIdToCancel = 0;
+	{
+		std::scoped_lock lock(m_attackCheckMutex);
+		if (m_hasPendingAttackCheck && generation == m_attackCheckGeneration) {
+			m_pendingAttackCheckEventId = eventId;
+		} else if (eventId != 0) {
+			eventIdToCancel = eventId;
+		}
+
+		if (eventId == 0) {
+			m_hasPendingAttackCheck = false;
+		}
+	}
+
+	if (eventIdToCancel != 0) {
+		g_dispatcher().stopEvent(eventIdToCancel);
+	}
 }
 
 void Player::goToFollowCreature() {
