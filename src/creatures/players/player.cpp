@@ -5870,25 +5870,26 @@ void Player::requestAttackCheck(uint32_t delay) {
 	const auto weakPlayer = std::weak_ptr<Player>(getPlayer());
 	const auto eventId = g_dispatcher().scheduleEvent(
 		delay,
-			[weakPlayer, generation, requestToken] {
-				const auto &player = weakPlayer.lock();
-				if (!player) {
-					return;
+		[weakPlayer, generation, requestToken] {
+			const auto &player = weakPlayer.lock();
+			if (!player) {
+				return;
 			}
 
 			{
 				std::scoped_lock lock(player->m_attackCheckMutex);
 				// Drop stale callbacks from older generations or already-cleared state.
-					if (!player->m_hasPendingAttackCheck || generation != player->m_attackCheckGeneration || requestToken != player->m_attackCheckRequestToken) {
-						return;
-					}
+				if (!player->m_hasPendingAttackCheck || generation != player->m_attackCheckGeneration || requestToken != player->m_attackCheckRequestToken) {
+					return;
+				}
 
 				player->m_pendingAttackCheckEventId = 0;
 				player->m_hasPendingAttackCheck = false;
 			}
 			player->checkCreatureAttack(true);
 		},
-		"Player::requestAttackCheck");
+		"Player::requestAttackCheck"
+	);
 
 	uint64_t eventIdToCancel = 0;
 	{
