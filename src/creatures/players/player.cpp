@@ -5874,7 +5874,8 @@ void Player::requestAttackCheck(uint32_t delay) {
 			}
 			player->checkCreatureAttack(true);
 		},
-		"Player::requestAttackCheck");
+		"Player::requestAttackCheck"
+	);
 
 	{
 		std::scoped_lock lock(m_attackCheckMutex);
