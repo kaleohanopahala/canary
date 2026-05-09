@@ -5875,42 +5875,43 @@ void Player::requestAttackCheck(uint32_t delay) {
 	const auto weakPlayer = std::weak_ptr<Player>(getPlayer());
 	const auto eventId = g_dispatcher().scheduleEvent(
 		delay,
-			[weakPlayer, generation, requestToken] {
-				const auto &player = weakPlayer.lock();
-				if (!player) {
-					return;
+		[weakPlayer, generation, requestToken] {
+			const auto &player = weakPlayer.lock();
+			if (!player) {
+				return;
 			}
 
 			{
 				std::scoped_lock lock(player->m_attackCheckMutex);
 				// Drop stale callbacks from older generations or already-cleared state.
-					if (!player->m_hasPendingAttackCheck || generation != player->m_attackCheckGeneration || requestToken != player->m_attackCheckRequestToken) {
-						return;
-					}
-
-					player->m_pendingAttackCheckEventId = 0;
-					player->m_pendingAttackCheckDueTime = 0;
-					player->m_hasPendingAttackCheck = false;
+				if (!player->m_hasPendingAttackCheck || generation != player->m_attackCheckGeneration || requestToken != player->m_attackCheckRequestToken) {
+					return;
 				}
+
+				player->m_pendingAttackCheckEventId = 0;
+				player->m_pendingAttackCheckDueTime = 0;
+				player->m_hasPendingAttackCheck = false;
+			}
 			player->checkCreatureAttack(true);
 		},
-		"Player::requestAttackCheck");
+		"Player::requestAttackCheck"
+	);
 
 	uint64_t eventIdToCancel = 0;
 	{
 		std::scoped_lock lock(m_attackCheckMutex);
-			if (m_hasPendingAttackCheck && generation == m_attackCheckGeneration && requestToken == m_attackCheckRequestToken) {
-				m_pendingAttackCheckEventId = eventId;
-				m_pendingAttackCheckDueTime = eventId != 0 ? newDueTime : 0;
-			} else if (eventId != 0) {
-				eventIdToCancel = eventId;
-			}
-
-			if (eventId == 0) {
-				m_pendingAttackCheckDueTime = 0;
-				m_hasPendingAttackCheck = false;
-			}
+		if (m_hasPendingAttackCheck && generation == m_attackCheckGeneration && requestToken == m_attackCheckRequestToken) {
+			m_pendingAttackCheckEventId = eventId;
+			m_pendingAttackCheckDueTime = eventId != 0 ? newDueTime : 0;
+		} else if (eventId != 0) {
+			eventIdToCancel = eventId;
 		}
+
+		if (eventId == 0) {
+			m_pendingAttackCheckDueTime = 0;
+			m_hasPendingAttackCheck = false;
+		}
+	}
 
 	if (eventIdToCancel != 0) {
 		g_dispatcher().stopEvent(eventIdToCancel);
