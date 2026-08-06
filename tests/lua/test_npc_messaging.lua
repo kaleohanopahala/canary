@@ -114,6 +114,91 @@ test("MsgContains: keyword with pattern metacharacters", function()
 end)
 
 ---------------------------------------------------------------------------
+-- NPC inactivity tests
+---------------------------------------------------------------------------
+
+dofile("data/npclib/npc_system/npc_handler.lua")
+
+local function createNpcConversation()
+	local player = {
+		getId = function()
+			return 1
+		end,
+		getName = function()
+			return "Tester"
+		end,
+	}
+	local interacting = true
+	local npc = {
+		isInteractingWithPlayer = function()
+			return interacting
+		end,
+		removePlayerInteraction = function()
+			interacting = false
+		end,
+		isMerchant = function()
+			return false
+		end,
+		getId = function()
+			return 2
+		end,
+	}
+	Player = function()
+		return player
+	end
+
+	local handler = NpcHandler:new({
+		reset = function() end,
+	})
+	local farewell
+	function handler:say(message)
+		farewell = message
+	end
+	return handler, npc, player, function()
+		return farewell, interacting
+	end
+end
+
+local function withFixedTime(timestamp, fn)
+	local originalTime = os.time
+	os.time = function()
+		return timestamp
+	end
+	local ok, err = pcall(fn)
+	os.time = originalTime
+	if not ok then
+		error(err, 2)
+	end
+end
+
+test("NpcHandler: keeps a conversation active for 45 seconds", function()
+	local handler, npc, player, getState = createNpcConversation()
+	withFixedTime(1000, function()
+		handler:setTalkStart(player:getId(), os.time() - 45)
+		handler:onThink(npc, 1000)
+	end)
+
+	local farewell, interacting = getState()
+	assert_true(farewell == nil, "farewell should not be sent at exactly 45 seconds")
+	assert_true(interacting, "conversation should remain active at exactly 45 seconds")
+end)
+
+test("NpcHandler: says farewell after more than 45 seconds of inactivity", function()
+	local handler, npc, player, getState = createNpcConversation()
+	-- Simulate an NPC whose file does not define MESSAGE_FAREWELL.
+	handler.messages = {}
+	withFixedTime(1000, function()
+		handler:setTalkStart(player:getId(), os.time() - 46)
+		handler:onThink(npc, 1000)
+	end)
+
+	local farewell, interacting = getState()
+	assert_true(farewell == "Good bye, Tester.", "expected the default farewell message")
+	assert_false(interacting, "conversation should be removed after the farewell")
+	assert_true(handler:getTalkStart(player:getId()) == nil, "talk start should be cleared")
+end)
+
+---------------------------------------------------------------------------
 -- Results
 ---------------------------------------------------------------------------
 print(string.format("\n%d passed, %d failed", passed, failed))
