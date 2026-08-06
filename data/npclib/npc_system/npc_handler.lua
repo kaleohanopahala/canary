@@ -75,6 +75,7 @@ if NpcHandler == nil then
 		talkStart = nil,
 		talkDelay = 300, -- Delay from each messages
 		talkDelayTimeForOutgoingMessages = 1, -- Seconds to delay outgoing messages
+		talkTimeout = 45, -- Seconds before an inactive conversation is ended
 		callbackFunctions = nil,
 		modules = nil,
 		npcName = nil,
@@ -390,7 +391,7 @@ if NpcHandler == nil then
 		local callback = self:getCallback(CALLBACK_FAREWELL)
 		if callback == nil or callback(player) then
 			if self:processModuleCallback(CALLBACK_FAREWELL) then
-				local msg = self:getMessage(MESSAGE_FAREWELL)
+				local msg = self:getMessage(MESSAGE_FAREWELL) or NpcHandler.messages[MESSAGE_FAREWELL]
 				local playerName = player:getName() or -1
 				local parseInfo = { [TAG_PLAYERNAME] = playerName }
 				self:resetNpc(npc, player)
@@ -513,6 +514,18 @@ if NpcHandler == nil then
 
 	-- Handles onThink events. If you wish to handle this yourself, please use the CALLBACK_ON_THINK callback.
 	function NpcHandler:onThink(npc, interval)
+		local currentTime = os.time()
+		for playerId, talkStart in pairs(self.talkStart) do
+			if currentTime - talkStart > self.talkTimeout then
+				local player = Player(playerId)
+				if player and self:checkInteraction(npc, player) then
+					self:onFarewell(npc, player)
+				else
+					self:setTalkStart(playerId, nil)
+				end
+			end
+		end
+
 		local callback = self:getCallback(CALLBACK_ON_THINK)
 		if callback == nil or callback(npc, interval) then
 			if self:processModuleCallback(CALLBACK_ON_THINK, npc, interval) then
