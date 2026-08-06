@@ -39,6 +39,7 @@ void NpcFunctions::init(lua_State* L) {
 	Lua::registerMethod(L, "Npc", "openShopWindow", NpcFunctions::luaNpcOpenShopWindow);
 	Lua::registerMethod(L, "Npc", "openShopWindowTable", NpcFunctions::luaNpcOpenShopWindowTable);
 	Lua::registerMethod(L, "Npc", "closeShopWindow", NpcFunctions::luaNpcCloseShopWindow);
+	Lua::registerMethod(L, "Npc", "isShopOpen", NpcFunctions::luaNpcIsShopOpen);
 	Lua::registerMethod(L, "Npc", "getShopItem", NpcFunctions::luaNpcGetShopItem);
 	Lua::registerMethod(L, "Npc", "isMerchant", NpcFunctions::luaNpcIsMerchant);
 
@@ -469,6 +470,26 @@ int NpcFunctions::luaNpcCloseShopWindow(lua_State* L) {
 	}
 
 	Lua::pushBoolean(L, true);
+	return 1;
+}
+
+int NpcFunctions::luaNpcIsShopOpen(lua_State* L) {
+	// npc:isShopOpen(player)
+	const auto &player = Lua::getPlayer(L, 2);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		Lua::pushBoolean(L, false);
+		return 1;
+	}
+
+	const auto &npc = Lua::getUserdataShared<Npc>(L, 1, "Npc");
+	if (!npc) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_NPC_NOT_FOUND));
+		Lua::pushBoolean(L, false);
+		return 1;
+	}
+
+	Lua::pushBoolean(L, player->getShopOwner() == npc);
 	return 1;
 }
 

@@ -39,6 +39,7 @@ private:
 	static int luaNpcOpenShopWindow(lua_State* L);
 	static int luaNpcOpenShopWindowTable(lua_State* L);
 	static int luaNpcCloseShopWindow(lua_State* L);
+	static int luaNpcIsShopOpen(lua_State* L);
 	static int luaNpcGetShopItem(lua_State* L);
 	static int luaNpcIsMerchant(lua_State* L);
 
